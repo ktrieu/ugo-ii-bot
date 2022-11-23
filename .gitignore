@@ -2,3 +2,8 @@
 
 # Environment vars
 .env
+
+# Database files
+ugo.db
+ugo.db-shm
+ugo.db-wal
