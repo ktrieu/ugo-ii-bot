@@ -15,6 +15,8 @@ use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 
+mod user;
+
 struct Handler {
     db: SqlitePool,
 }
@@ -29,10 +31,10 @@ fn test_command_register(command: &mut CreateApplicationCommand) -> &mut CreateA
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            let content = match command.data.name.as_str() {
-                "test" => "UGO II BOT TEST",
-                _ => !unimplemented!(),
-            };
+            let discord_id = command.member.as_ref().unwrap().user.id.to_string();
+            let user = user::get_user(&self.db, &discord_id).await.unwrap();
+
+            let content: String = format!("Hello {}", user.display_name);
 
             let resp_result = command
                 .create_interaction_response(ctx.http, |response| {

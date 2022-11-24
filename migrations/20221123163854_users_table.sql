@@ -1,6 +1,11 @@
--- Add migration script here
 CREATE TABLE users (
-    discord_id INT NOT NULL,
-    display_name VARCHAR(255) NOT NULL,
-    PRIMARY KEY (discord_id)
+    id INTEGER PRIMARY KEY NOT NULL,
+    display_name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE users_discord_ids (
+    id INTEGER PRIMARY KEY NOT NULL,
+    discord_id VARCHAR(255) NOT NULL,
+    user_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id)
 );
