@@ -5,7 +5,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use dotenv::dotenv;
-use scrum::should_create_scrum;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
@@ -38,7 +37,7 @@ const BOT_CHANNEL_ID: u64 = 1044762069070774332;
 async fn job_poll_fn(db: &SqlitePool, ctx: Context) {
     let now = Local::now();
 
-    match should_create_scrum(&db, now).await {
+    match scrum::should_create_scrum(&db, now).await {
         Ok(true) => {
             let channel_id = ChannelId(BOT_CHANNEL_ID);
             if let Err(why) = scrum::notify_scrum(db, now, &ctx, channel_id).await {

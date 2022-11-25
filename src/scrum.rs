@@ -6,6 +6,13 @@ use serenity::model::id::MessageId;
 
 use sqlx::SqlitePool;
 
+pub struct Scrum {
+    id: i64,
+    is_open: bool,
+    scrum_date: String,
+    message_id: String,
+}
+
 #[derive(Debug)]
 pub enum ScrumError {
     SerenityError(serenity::Error),
@@ -41,6 +48,23 @@ pub async fn create_scrum_row(
     }
 }
 
+pub async fn get_scrum_from_message(
+    db: &SqlitePool,
+    message_id: MessageId,
+) -> Result<Option<Scrum>, ScrumError> {
+    let message_str = message_id.to_string();
+
+    let result = sqlx::query_as!(
+        Scrum,
+        "SELECT id, is_open, scrum_date, message_id from scrums WHERE message_id = ?",
+        message_str
+    )
+    .fetch_optional(db)
+    .await;
+
+    result.map_err(|err| ScrumError::SqlxError(err))
+}
+
 pub async fn does_open_scrum_exist(
     db: &SqlitePool,
     date: DateTime<Local>,
@@ -49,10 +73,13 @@ pub async fn does_open_scrum_exist(
 
     let result = sqlx::query!("SELECT is_open FROM scrums WHERE scrum_date = ?", date_str)
         .fetch_optional(db)
-        .await
-        .map_err(|err| ScrumError::SqlxError(err))?;
+        .await;
 
-    result.map_or(Ok(false), |row| Ok(row.is_open))
+    match result {
+        Ok(Some(scrum)) => Ok(scrum.is_open),
+        Ok(None) => Ok(false),
+        Err(err) => Err(ScrumError::SqlxError(err)),
+    }
 }
 
 fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
