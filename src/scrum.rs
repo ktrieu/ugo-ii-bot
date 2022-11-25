@@ -71,15 +71,15 @@ pub async fn does_open_scrum_exist(
 ) -> Result<bool, ScrumError> {
     let date_str = date_to_scrum_db_format(date);
 
-    let result = sqlx::query!("SELECT is_open FROM scrums WHERE scrum_date = ?", date_str)
-        .fetch_optional(db)
-        .await;
+    let scrum = sqlx::query!(
+        "SELECT is_open FROM scrums WHERE scrum_date = ? and is_open = true",
+        date_str
+    )
+    .fetch_optional(db)
+    .await
+    .map_err(|err| ScrumError::SqlxError(err))?;
 
-    match result {
-        Ok(Some(scrum)) => Ok(scrum.is_open),
-        Ok(None) => Ok(false),
-        Err(err) => Err(ScrumError::SqlxError(err)),
-    }
+    Ok(scrum.is_some())
 }
 
 fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
