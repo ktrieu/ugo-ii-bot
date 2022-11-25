@@ -1,0 +1,6 @@
+CREATE TABLE scrums (
+    id INTEGER PRIMARY KEY NOT NULL,
+    scrum_date VARCHAR(255) NOT NULL UNIQUE,
+    is_open BOOLEAN NOT NULL,
+    message_id VARCHAR(255) NOT NULL
+);

@@ -2,19 +2,24 @@ extern crate dotenv;
 
 use std::env;
 use std::str::FromStr;
+use std::time::Duration;
 
 use dotenv::dotenv;
+use scrum::should_create_scrum;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::gateway::Ready;
-use serenity::model::id::GuildId;
+use serenity::model::id::{ChannelId, GuildId};
 use serenity::{async_trait, prelude::*};
 
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 
+use chrono::prelude::*;
+
+mod scrum;
 mod user;
 
 struct Handler {
@@ -25,6 +30,24 @@ fn test_command_register(command: &mut CreateApplicationCommand) -> &mut CreateA
     command
         .name("test")
         .description("A test command for the UGO bot")
+}
+
+const GENERAL_CHANNEL_ID: u64 = 822531930384891948;
+const BOT_CHANNEL_ID: u64 = 1044762069070774332;
+
+async fn job_poll_fn(db: &SqlitePool, ctx: Context) {
+    let now = Local::now();
+
+    match should_create_scrum(&db, now).await {
+        Ok(true) => {
+            let channel_id = ChannelId(BOT_CHANNEL_ID);
+            if let Err(why) = scrum::notify_scrum(db, now, &ctx, channel_id).await {
+                println!("Failed to notify scrum: {:?}", why);
+            }
+        }
+        Ok(false) => (),
+        Err(err) => println!("Failed to check scrum creation: {:?}", err),
+    };
 }
 
 #[async_trait]
@@ -59,7 +82,7 @@ impl EventHandler for Handler {
         );
 
         let create_result = guild_id
-            .set_application_commands(ctx.http, |commands| {
+            .set_application_commands(&ctx.http, |commands| {
                 commands.create_application_command(|command| test_command_register(command))
             })
             .await;
@@ -67,6 +90,14 @@ impl EventHandler for Handler {
         if let Err(why) = create_result {
             println!("Failed to create commands! {:?}", why);
         }
+
+        let db = self.db.clone();
+        tokio::spawn(async move {
+            loop {
+                job_poll_fn(&db, ctx.clone()).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
     }
 }
 
