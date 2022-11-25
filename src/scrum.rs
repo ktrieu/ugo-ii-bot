@@ -108,7 +108,17 @@ pub async fn notify_scrum(
         .await
         .map_err(|err| ScrumError::SerenityError(err))?;
 
-    create_scrum_row(db, date, message.id).await?;
+    let result = create_scrum_row(db, date, message.id).await;
+
+    // Roll back the message on databse failure, so we can re-try next time this job runs
+    if let Err(err) = result {
+        // If the delete fails, just throw up our hands
+        message
+            .delete(&ctx.http)
+            .await
+            .map_err(|err| ScrumError::SerenityError(err))?;
+        return Err(err);
+    }
 
     Ok(())
 }
