@@ -56,7 +56,7 @@ async fn job_poll_fn(db: &SqlitePool, ctx: Context) {
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            let discord_id = command.member.as_ref().unwrap().user.id.to_string();
+            let discord_id = command.member.as_ref().unwrap().user.id;
             let user = user::get_user(&self.db, &discord_id).await.unwrap();
 
             let content: String = format!("Hello {}", user.display_name);

@@ -110,8 +110,8 @@ pub async fn parse_react(
     }
 
     let user_id = match react.user_id {
-        Some(id) => id.to_string(),
-        // Reacts not create by users aren't responses.
+        Some(id) => id,
+        // Reacts not created by users aren't responses.
         None => return Ok(None),
     };
 
