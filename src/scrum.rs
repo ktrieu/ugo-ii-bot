@@ -22,10 +22,10 @@ pub fn date_to_scrum_db_format(date: DateTime<Local>) -> String {
 
 pub async fn create_scrum_row(
     db: &SqlitePool,
-    date: DateTime<Local>,
+    datetime: DateTime<Local>,
     message_id: MessageId,
 ) -> Result<(), Error> {
-    let date_str = date_to_scrum_db_format(date);
+    let date_str = date_to_scrum_db_format(datetime);
     let message_str = message_id.to_string();
 
     sqlx::query!(
@@ -59,12 +59,23 @@ pub async fn get_scrum_from_message(
     Ok(result)
 }
 
-pub async fn does_scrum_exist(db: &SqlitePool, date: DateTime<Local>) -> Result<bool, Error> {
-    let date_str = date_to_scrum_db_format(date);
+async fn get_scrum_for_date(
+    db: &SqlitePool,
+    datetime: DateTime<Local>,
+) -> Result<Option<Scrum>, Error> {
+    let date_str = date_to_scrum_db_format(datetime);
 
-    let scrum = sqlx::query!("SELECT is_open FROM scrums WHERE scrum_date = ?", date_str)
-        .fetch_optional(db)
-        .await?;
+    Ok(sqlx::query_as!(
+        Scrum,
+        "SELECT id, is_open, scrum_date, message_id FROM scrums WHERE scrum_date = ?",
+        date_str
+    )
+    .fetch_optional(db)
+    .await?)
+}
+
+pub async fn does_scrum_exist(db: &SqlitePool, datetime: DateTime<Local>) -> Result<bool, Error> {
+    let scrum = get_scrum_for_date(db, datetime).await?;
 
     Ok(scrum.is_some())
 }
@@ -86,7 +97,7 @@ This does not indicate a scrum.";
 
 pub async fn notify_scrum(
     db: &SqlitePool,
-    date: DateTime<Local>,
+    datetime: DateTime<Local>,
     ctx: &Context,
     channel_id: ChannelId,
 ) -> Result<(), Error> {
@@ -101,7 +112,7 @@ pub async fn notify_scrum(
         .react(&ctx.http, ReactionType::Unicode("👎".to_string()))
         .await?;
 
-    let result = create_scrum_row(db, date, message.id).await;
+    let result = create_scrum_row(db, datetime, message.id).await;
 
     // Roll back the message on databse failure, so we can re-try next time this job runs
     if let Err(err) = result {
@@ -109,6 +120,40 @@ pub async fn notify_scrum(
         message.delete(&ctx.http).await?;
         return Err(err);
     }
+
+    Ok(())
+}
+
+fn is_past_scrum_close_time(datetime: DateTime<Local>) -> bool {
+    // Let's close past 10 PM
+    datetime.hour() >= 22
+}
+
+async fn does_open_scrum_exist(db: &SqlitePool, datetime: DateTime<Local>) -> Result<bool, Error> {
+    let scrum = get_scrum_for_date(db, datetime).await?;
+
+    match scrum {
+        Some(scrum) => Ok(scrum.is_open),
+        None => Ok(false),
+    }
+}
+
+pub async fn should_close_today_scrum(
+    db: &SqlitePool,
+    datetime: DateTime<Local>,
+) -> Result<bool, Error> {
+    Ok(is_past_scrum_close_time(datetime) && does_open_scrum_exist(db, datetime).await?)
+}
+
+pub async fn close_todays_scrum(db: &SqlitePool, datetime: DateTime<Local>) -> Result<(), Error> {
+    let scrum_date = date_to_scrum_db_format(datetime);
+
+    sqlx::query!(
+        "UPDATE scrums SET is_open = false WHERE scrum_date = ?",
+        scrum_date
+    )
+    .execute(db)
+    .await?;
 
     Ok(())
 }
