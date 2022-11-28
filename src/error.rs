@@ -3,7 +3,6 @@ pub enum Error {
     DatabaseError(sqlx::Error),
     DiscordError(serenity::Error),
     UserNotFound,
-    ScrumNotFound,
 }
 
 impl From<sqlx::Error> for Error {
