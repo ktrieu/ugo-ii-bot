@@ -1,18 +1,13 @@
 use sqlx::SqlitePool;
 
+use crate::error::Error;
 pub struct User {
     pub id: i64,
     pub discord_id: String,
     pub display_name: String,
 }
 
-#[derive(Debug)]
-pub enum UserGetError {
-    SqlxError(sqlx::Error),
-    UserNotFound,
-}
-
-pub async fn get_user(db: &SqlitePool, discord_id: &str) -> Result<User, UserGetError> {
+pub async fn get_user(db: &SqlitePool, discord_id: &str) -> Result<User, Error> {
     let query = sqlx::query_as!(
         User,
         "SELECT 
@@ -26,7 +21,7 @@ pub async fn get_user(db: &SqlitePool, discord_id: &str) -> Result<User, UserGet
     .await;
 
     query.map_err(|err| match err {
-        sqlx::Error::RowNotFound => UserGetError::UserNotFound,
-        _ => UserGetError::SqlxError(err),
+        sqlx::Error::RowNotFound => Error::UserNotFound,
+        _ => err.into(),
     })
 }

@@ -6,17 +6,13 @@ use serenity::model::id::MessageId;
 
 use sqlx::SqlitePool;
 
+use crate::error::Error;
+
 pub struct Scrum {
     id: i64,
     is_open: bool,
     scrum_date: String,
     message_id: String,
-}
-
-#[derive(Debug)]
-pub enum ScrumError {
-    SerenityError(serenity::Error),
-    SqlxError(sqlx::Error),
 }
 
 pub fn date_to_scrum_db_format(date: DateTime<Local>) -> String {
@@ -27,11 +23,11 @@ pub async fn create_scrum_row(
     db: &SqlitePool,
     date: DateTime<Local>,
     message_id: MessageId,
-) -> Result<(), ScrumError> {
+) -> Result<(), Error> {
     let date_str = date_to_scrum_db_format(date);
     let message_str = message_id.to_string();
 
-    let result = sqlx::query!(
+    sqlx::query!(
         "
         INSERT INTO scrums (scrum_date, is_open, message_id)
         VALUES (?, true, ?)
@@ -40,18 +36,15 @@ pub async fn create_scrum_row(
         message_str
     )
     .execute(db)
-    .await;
+    .await?;
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(sqlx_err) => Err(ScrumError::SqlxError(sqlx_err)),
-    }
+    Ok(())
 }
 
 pub async fn get_scrum_from_message(
     db: &SqlitePool,
     message_id: MessageId,
-) -> Result<Option<Scrum>, ScrumError> {
+) -> Result<Option<Scrum>, Error> {
     let message_str = message_id.to_string();
 
     let result = sqlx::query_as!(
@@ -60,15 +53,12 @@ pub async fn get_scrum_from_message(
         message_str
     )
     .fetch_optional(db)
-    .await;
+    .await?;
 
-    result.map_err(|err| ScrumError::SqlxError(err))
+    Ok(result)
 }
 
-pub async fn does_open_scrum_exist(
-    db: &SqlitePool,
-    date: DateTime<Local>,
-) -> Result<bool, ScrumError> {
+pub async fn does_open_scrum_exist(db: &SqlitePool, date: DateTime<Local>) -> Result<bool, Error> {
     let date_str = date_to_scrum_db_format(date);
 
     let scrum = sqlx::query!(
@@ -76,8 +66,7 @@ pub async fn does_open_scrum_exist(
         date_str
     )
     .fetch_optional(db)
-    .await
-    .map_err(|err| ScrumError::SqlxError(err))?;
+    .await?;
 
     Ok(scrum.is_some())
 }
@@ -90,7 +79,7 @@ fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
 pub async fn should_create_scrum(
     db: &SqlitePool,
     datetime: DateTime<Local>,
-) -> Result<bool, ScrumError> {
+) -> Result<bool, Error> {
     Ok(is_past_scrum_notification_time(datetime) && !does_open_scrum_exist(db, datetime).await?)
 }
 
@@ -102,21 +91,17 @@ pub async fn notify_scrum(
     date: DateTime<Local>,
     ctx: &Context,
     channel_id: ChannelId,
-) -> Result<(), ScrumError> {
+) -> Result<(), Error> {
     let message = channel_id
         .send_message(&ctx.http, |message| message.content(SCRUM_NOTIFY_STRING))
-        .await
-        .map_err(|err| ScrumError::SerenityError(err))?;
+        .await?;
 
     let result = create_scrum_row(db, date, message.id).await;
 
     // Roll back the message on databse failure, so we can re-try next time this job runs
     if let Err(err) = result {
-        // If the delete fails, just throw up our hands
-        message
-            .delete(&ctx.http)
-            .await
-            .map_err(|err| ScrumError::SerenityError(err))?;
+        // If the delete fails, just throw up our hands and give up
+        message.delete(&ctx.http).await?;
         return Err(err);
     }
 
