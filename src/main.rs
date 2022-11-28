@@ -76,12 +76,18 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_add(&self, ctx: Context, added: Reaction) {
+        // Exclude reacts we sent
+        if let Some(id) = added.user_id {
+            if (id == ctx.cache.current_user_id()) {
+                return;
+            }
+        }
+
         let response_time = chrono::Local::now();
 
         match scrum_resp::parse_react(&self.db, &ctx, &added).await {
             Ok(Some(scrum_react)) => {
                 let result = scrum_resp::respond_scrum(&self.db, &scrum_react, response_time).await;
-
                 if let Err(why) = result {
                     println!("Failed to respond to scrum {:?}", why);
                 }
@@ -94,6 +100,13 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_remove(&self, ctx: Context, removed: Reaction) {
+        // Exclude reacts we sent
+        if let Some(id) = removed.user_id {
+            if (id == ctx.cache.current_user_id()) {
+                return;
+            }
+        }
+
         match scrum_resp::parse_react(&self.db, &ctx, &removed).await {
             Ok(Some(scrum_react)) => {
                 let result = scrum_resp::unrespond_scrum(&self.db, &scrum_react).await;
