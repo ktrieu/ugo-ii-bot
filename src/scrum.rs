@@ -59,29 +59,26 @@ pub async fn get_scrum_from_message(
     Ok(result)
 }
 
-pub async fn does_open_scrum_exist(db: &SqlitePool, date: DateTime<Local>) -> Result<bool, Error> {
+pub async fn does_scrum_exist(db: &SqlitePool, date: DateTime<Local>) -> Result<bool, Error> {
     let date_str = date_to_scrum_db_format(date);
 
-    let scrum = sqlx::query!(
-        "SELECT is_open FROM scrums WHERE scrum_date = ? and is_open = true",
-        date_str
-    )
-    .fetch_optional(db)
-    .await?;
+    let scrum = sqlx::query!("SELECT is_open FROM scrums WHERE scrum_date = ?", date_str)
+        .fetch_optional(db)
+        .await?;
 
     Ok(scrum.is_some())
 }
 
 fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
     // We only notify past 3 AM
-    datetime.hour() > 3
+    datetime.hour() >= 3
 }
 
 pub async fn should_create_scrum(
     db: &SqlitePool,
     datetime: DateTime<Local>,
 ) -> Result<bool, Error> {
-    Ok(is_past_scrum_notification_time(datetime) && !does_open_scrum_exist(db, datetime).await?)
+    Ok(is_past_scrum_notification_time(datetime) && !does_scrum_exist(db, datetime).await?)
 }
 
 const SCRUM_NOTIFY_STRING: &str = "AUTOMATED SCRUM TEST: This is a test of the new scrum system. 
