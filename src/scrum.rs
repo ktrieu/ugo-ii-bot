@@ -1,6 +1,7 @@
 use chrono::{DateTime, Local, Timelike};
 
 use serenity::client::Context;
+use serenity::model::channel::ReactionType;
 use serenity::model::id::ChannelId;
 use serenity::model::id::MessageId;
 
@@ -94,6 +95,13 @@ pub async fn notify_scrum(
 ) -> Result<(), Error> {
     let message = channel_id
         .send_message(&ctx.http, |message| message.content(SCRUM_NOTIFY_STRING))
+        .await?;
+
+    message
+        .react(&ctx.http, ReactionType::Unicode("👍".to_string()))
+        .await?;
+    message
+        .react(&ctx.http, ReactionType::Unicode("👎".to_string()))
         .await?;
 
     let result = create_scrum_row(db, date, message.id).await;
