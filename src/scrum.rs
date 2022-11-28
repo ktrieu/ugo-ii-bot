@@ -9,10 +9,10 @@ use sqlx::SqlitePool;
 use crate::error::Error;
 
 pub struct Scrum {
-    id: i64,
-    is_open: bool,
-    scrum_date: String,
-    message_id: String,
+    pub id: i64,
+    pub is_open: bool,
+    pub scrum_date: String,
+    pub message_id: String,
 }
 
 pub fn date_to_scrum_db_format(date: DateTime<Local>) -> String {

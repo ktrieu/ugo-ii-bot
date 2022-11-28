@@ -8,6 +8,7 @@ use dotenv::dotenv;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
+use serenity::model::channel::Reaction;
 use serenity::model::gateway::Ready;
 use serenity::model::id::{ChannelId, GuildId};
 use serenity::{async_trait, prelude::*};
@@ -74,6 +75,40 @@ impl EventHandler for Handler {
         }
     }
 
+    async fn reaction_add(&self, ctx: Context, added: Reaction) {
+        let response_time = chrono::Local::now();
+
+        match scrum_resp::parse_react(&self.db, &ctx, &added).await {
+            Ok(Some(scrum_react)) => {
+                let result = scrum_resp::respond_scrum(&self.db, &scrum_react, response_time).await;
+
+                if let Err(why) = result {
+                    println!("Failed to respond to scrum {:?}", why);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                println!("Failed to parse added react {:?}", err);
+            }
+        };
+    }
+
+    async fn reaction_remove(&self, ctx: Context, removed: Reaction) {
+        match scrum_resp::parse_react(&self.db, &ctx, &removed).await {
+            Ok(Some(scrum_react)) => {
+                let result = scrum_resp::unrespond_scrum(&self.db, &scrum_react).await;
+
+                if let Err(why) = result {
+                    println!("Failed to unrespond to scrum {:?}", why);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                println!("Failed to parse removed react {:?}", err);
+            }
+        }
+    }
+
     async fn ready(&self, ctx: Context, _ready: Ready) {
         let guild_id = GuildId(
             env::var("GUILD_ID")
@@ -124,7 +159,9 @@ async fn main() {
 
     let handler = Handler { db: database };
 
-    let mut client = Client::builder(token, GatewayIntents::empty())
+    let intents = GatewayIntents::GUILD_MESSAGE_REACTIONS;
+
+    let mut client = Client::builder(token, intents)
         .event_handler(handler)
         .await
         .expect("Failed to create Discord client!");
