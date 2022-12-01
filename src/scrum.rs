@@ -25,6 +25,14 @@ impl Scrum {
     pub fn date(&self) -> Result<NaiveDate, Error> {
         Ok(NaiveDate::parse_from_str(&self.scrum_date, "%Y-%m-%d")?)
     }
+
+    pub fn message_id(&self) -> Result<MessageId, Error> {
+        let id_int: u64 = self
+            .message_id
+            .parse()
+            .map_err(|err| Error::from(InnerError::IdParseError(err)))?;
+        Ok(MessageId(id_int))
+    }
 }
 
 pub fn date_to_scrum_db_format(date: DateTime<Local>) -> String {
@@ -222,10 +230,6 @@ pub async fn parse_scrum_reactions(
     })
 }
 
-pub fn scrum_possible(reactions: &ParsedScrumReacts) -> bool {
-    reactions.num_available >= 3 || reactions.num_unavailable >= 2
-}
-
 fn is_past_scrum_close_time(datetime: DateTime<Local>) -> bool {
     // Let's close past 10 PM
     datetime.hour() >= 22
@@ -240,26 +244,28 @@ async fn does_open_scrum_exist(db: &SqlitePool, datetime: DateTime<Local>) -> Re
     }
 }
 
-pub async fn should_close_today_scrum(
+pub async fn should_force_close_today_scrum(
     db: &SqlitePool,
     datetime: DateTime<Local>,
 ) -> Result<bool, Error> {
     Ok(is_past_scrum_close_time(datetime) && does_open_scrum_exist(db, datetime).await?)
 }
 
-pub async fn alert_scrum_possible(
-    db: &SqlitePool,
-    ctx: &Context,
-    scrum: &Scrum,
-    reactions: &ParsedScrumReacts,
-    channel_id: ChannelId,
-) -> Result<(), Error> {
-    sqlx::query!("UPDATE scrums SET is_open = false WHERE id = ?", scrum.id)
-        .execute(db)
-        .await?;
+pub enum ScrumStatus {
+    Possible,
+    Impossible,
+    Unknown,
+}
+
+fn format_scrum_close_notif(reactions: &ParsedScrumReacts, scrum_status: ScrumStatus) -> String {
+    let header_msg = match scrum_status {
+        ScrumStatus::Possible => "SCRUM POSSIBLE",
+        _ => "SCRUM FAILED",
+    };
 
     let mut close_message: String = format!(
-        "@everyone SCRUM POSSIBLE: {}/{} available for scrum.\n\nNot available:\n",
+        "@everyone {}: {}/{} available for scrum.\n\nNot available:\n",
+        header_msg,
         reactions.num_available,
         reactions.availability.len()
     );
@@ -271,8 +277,43 @@ pub async fn alert_scrum_possible(
         }
     }
 
+    close_message
+}
+
+pub fn scrum_status(reactions: &ParsedScrumReacts) -> ScrumStatus {
+    if reactions.num_available >= 3 {
+        ScrumStatus::Possible
+    } else if reactions.num_unavailable >= 2 {
+        ScrumStatus::Impossible
+    } else {
+        ScrumStatus::Unknown
+    }
+}
+
+const SCRUM_CLOSED_MESSAGE: &str = "Voting is closed for this scrum.";
+
+pub async fn close_scrum(
+    db: &SqlitePool,
+    ctx: &Context,
+    scrum: &Scrum,
+    reactions: &ParsedScrumReacts,
+    channel_id: ChannelId,
+    scrum_status: ScrumStatus,
+) -> Result<(), Error> {
+    sqlx::query!("UPDATE scrums SET is_open = false WHERE id = ?", scrum.id)
+        .execute(db)
+        .await?;
+
+    let mut message = channel_id.message(&ctx.http, scrum.message_id()?).await?;
+
+    message
+        .edit(&ctx.http, |edited| edited.content(SCRUM_CLOSED_MESSAGE))
+        .await?;
+
+    let msg = format_scrum_close_notif(reactions, scrum_status);
+
     channel_id
-        .send_message(&ctx.http, |message| message.content(close_message))
+        .send_message(&ctx.http, |message| message.content(msg))
         .await?;
 
     Ok(())

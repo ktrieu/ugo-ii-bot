@@ -115,10 +115,22 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
 
     println!("{:?}", reactions);
 
-    if scrum::scrum_possible(&reactions) {
-        scrum::alert_scrum_possible(&db, &ctx, &scrum, &reactions, ChannelId(GENERAL_CHANNEL_ID))
-            .await
-            .with_context("Alerting scrum possible")?;
+    let scrum_status = scrum::scrum_status(&reactions);
+
+    match scrum_status {
+        scrum::ScrumStatus::Possible | scrum::ScrumStatus::Impossible => {
+            scrum::close_scrum(
+                db,
+                ctx,
+                &scrum,
+                &reactions,
+                ChannelId(GENERAL_CHANNEL_ID),
+                scrum_status,
+            )
+            .await?;
+        }
+        // There's still time, do nothing
+        scrum::ScrumStatus::Unknown => {}
     }
 
     Ok(())
