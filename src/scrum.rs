@@ -102,8 +102,8 @@ pub async fn should_create_scrum(
     Ok(is_past_scrum_notification_time(datetime) && !does_scrum_exist(db, datetime).await?)
 }
 
-const SCRUM_NOTIFY_STRING: &str = "AUTOMATED SCRUM TEST: This is a test of the new scrum system. 
-This does not indicate a scrum.";
+const SCRUM_NOTIFY_STRING: &str = "@everyone
+UGO-BOT SCRUMMONS: React if you are available for scrum!";
 
 const SCRUM_ACCEPT_EMOJI: &str = "👍";
 const SCRUM_DECLINE_EMOJI: &str = "👎";
@@ -259,7 +259,7 @@ pub async fn alert_scrum_possible(
         .await?;
 
     let mut close_message: String = format!(
-        "SCRUM POSSIBLE: {}/{} available for scrum.\n\nNot available:\n",
+        "@everyone SCRUM POSSIBLE: {}/{} available for scrum.\n\nNot available:\n",
         reactions.num_available,
         reactions.availability.len()
     );

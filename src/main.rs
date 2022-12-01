@@ -46,7 +46,7 @@ async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> 
         .with_context("Checking scrum creation")?;
 
     if should_create_scrum {
-        let channel_id = ChannelId(BOT_CHANNEL_ID);
+        let channel_id = ChannelId(GENERAL_CHANNEL_ID);
         scrum::notify_scrum(db, now, &ctx, channel_id)
             .await
             .with_context("Notifying scrum")?;
