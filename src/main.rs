@@ -76,49 +76,47 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_add(&self, ctx: Context, added: Reaction) {
-        // Exclude reacts we sent
-        if let Some(id) = added.user_id {
-            if id == ctx.cache.current_user_id() {
+        let scrum = match scrum::get_scrum_from_message(&self.db, added.message_id).await {
+            Ok(Some(scrum)) => scrum,
+            Ok(None) => return,
+            Err(why) => {
+                println!("Failed to find scrum for message: {:?}", why);
                 return;
-            }
-        }
-
-        let response_time = chrono::Local::now();
-
-        match scrum_resp::parse_react(&self.db, &ctx, &added).await {
-            Ok(Some(scrum_react)) => {
-                let result = scrum_resp::respond_scrum(&self.db, &scrum_react, response_time).await;
-                if let Err(why) = result {
-                    println!("Failed to respond to scrum {:?}", why);
-                }
-            }
-            Ok(None) => {}
-            Err(err) => {
-                println!("Failed to parse added react {:?}", err);
             }
         };
-    }
 
-    async fn reaction_remove(&self, ctx: Context, removed: Reaction) {
-        // Exclude reacts we sent
-        if let Some(id) = removed.user_id {
-            if id == ctx.cache.current_user_id() {
-                return;
-            }
+        // If this is a closed scrum, ignore it.
+        if !scrum.is_open {
+            return;
         }
 
-        match scrum_resp::parse_react(&self.db, &ctx, &removed).await {
-            Ok(Some(scrum_react)) => {
-                let result = scrum_resp::unrespond_scrum(&self.db, &scrum_react).await;
+        let discord_message = match added.message(&ctx.http).await {
+            Ok(message) => message,
+            Err(why) => {
+                println!("Failed to find Discord message for react: {:?}", why);
+                return;
+            }
+        };
 
-                if let Err(why) = result {
-                    println!("Failed to unrespond to scrum {:?}", why);
-                }
+        let reactions = match scrum::parse_scrum_reactions(&self.db, &ctx, &discord_message).await {
+            Ok(reactions) => reactions,
+            Err(why) => {
+                println!("Failed to parse scrum reacts: {:?}", why);
+                return;
             }
-            Ok(None) => {}
-            Err(err) => {
-                println!("Failed to parse removed react {:?}", err);
-            }
+        };
+
+        println!("{:?}", reactions);
+
+        if scrum::scrum_possible(&reactions) {
+            scrum::alert_scrum_possible(
+                &self.db,
+                &ctx,
+                &scrum,
+                &reactions,
+                ChannelId(GENERAL_CHANNEL_ID),
+            )
+            .await;
         }
     }
 
