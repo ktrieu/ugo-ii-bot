@@ -5,6 +5,7 @@ pub enum InnerError {
     DatabaseError(sqlx::Error),
     DiscordError(serenity::Error),
     DateTimeParseError(chrono::ParseError),
+    IdParseError(std::num::ParseIntError),
     UserNotFound,
 }
 
@@ -59,6 +60,9 @@ impl Display for Error {
             }
             InnerError::DateTimeParseError(parse_err) => {
                 format!("DateTime parse error: {}", parse_err)
+            }
+            InnerError::IdParseError(int_parse_err) => {
+                format!("Error parsing ID from string: {}", int_parse_err)
             }
             InnerError::UserNotFound => "User not found.".to_string(),
         };
