@@ -113,8 +113,6 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
         .await
         .with_context("Parsing scrum reactions")?;
 
-    println!("{:?}", reactions);
-
     let scrum_status = scrum::scrum_status(&reactions);
 
     match scrum_status {
@@ -127,7 +125,8 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
                 ChannelId(GENERAL_CHANNEL_ID),
                 scrum_status,
             )
-            .await?;
+            .await
+            .with_context("Closing scrum")?;
         }
         // There's still time, do nothing
         scrum::ScrumStatus::Unknown => {}
