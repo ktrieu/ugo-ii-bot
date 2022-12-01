@@ -4,6 +4,7 @@ use std::fmt::Display;
 pub enum InnerError {
     DatabaseError(sqlx::Error),
     DiscordError(serenity::Error),
+    DateTimeParseError(chrono::ParseError),
     UserNotFound,
 }
 
@@ -31,6 +32,15 @@ impl From<serenity::Error> for Error {
     }
 }
 
+impl From<chrono::ParseError> for Error {
+    fn from(err: chrono::ParseError) -> Self {
+        Self {
+            error: InnerError::DateTimeParseError(err),
+            ctx: "",
+        }
+    }
+}
+
 impl From<InnerError> for Error {
     fn from(inner: InnerError) -> Self {
         Self {
@@ -46,6 +56,9 @@ impl Display for Error {
             InnerError::DatabaseError(db_err) => format!("Database error: {}", db_err),
             InnerError::DiscordError(discord_err) => {
                 format!("Discord error: {}", discord_err)
+            }
+            InnerError::DateTimeParseError(parse_err) => {
+                format!("DateTime parse error: {}", parse_err)
             }
             InnerError::UserNotFound => "User not found.".to_string(),
         };

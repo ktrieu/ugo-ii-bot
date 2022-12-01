@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::NaiveDate;
 use chrono::{DateTime, Local, Timelike};
 
 use serenity::client::Context;
@@ -18,6 +19,12 @@ pub struct Scrum {
     pub is_open: bool,
     pub scrum_date: String,
     pub message_id: String,
+}
+
+impl Scrum {
+    pub fn date(&self) -> Result<NaiveDate, Error> {
+        Ok(NaiveDate::parse_from_str(&self.scrum_date, "%Y-%m-%d")?)
+    }
 }
 
 pub fn date_to_scrum_db_format(date: DateTime<Local>) -> String {

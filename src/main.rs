@@ -84,6 +84,8 @@ async fn interaction_create(
 }
 
 async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result<(), error::Error> {
+    let now = Local::now();
+
     let scrum = match scrum::get_scrum_from_message(&db, added.message_id)
         .await
         .with_context("Fetching scrum from message")?
@@ -94,6 +96,11 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
 
     // If this is a closed scrum, ignore it.
     if !scrum.is_open {
+        return Ok(());
+    }
+
+    // If this isn't today's scrum, ignore it.
+    if scrum.date()? != now.date_naive() {
         return Ok(());
     }
 
