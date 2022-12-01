@@ -78,7 +78,7 @@ pub async fn get_scrum_from_message(
     Ok(result)
 }
 
-async fn get_scrum_for_date(
+pub async fn get_scrum_for_date(
     db: &SqlitePool,
     datetime: DateTime<Local>,
 ) -> Result<Option<Scrum>, Error> {
@@ -103,11 +103,8 @@ fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
     datetime.hour() >= 3
 }
 
-pub async fn should_create_scrum(
-    db: &SqlitePool,
-    datetime: DateTime<Local>,
-) -> Result<bool, Error> {
-    Ok(is_past_scrum_notification_time(datetime) && !does_scrum_exist(db, datetime).await?)
+pub fn should_create_scrum(datetime: DateTime<Local>, today_scrum: Option<&Scrum>) -> bool {
+    is_past_scrum_notification_time(datetime) && today_scrum.is_none()
 }
 
 const SCRUM_NOTIFY_STRING: &str = "@everyone
@@ -235,20 +232,11 @@ fn is_past_scrum_close_time(datetime: DateTime<Local>) -> bool {
     datetime.hour() >= 22
 }
 
-async fn does_open_scrum_exist(db: &SqlitePool, datetime: DateTime<Local>) -> Result<bool, Error> {
-    let scrum = get_scrum_for_date(db, datetime).await?;
-
-    match scrum {
-        Some(scrum) => Ok(scrum.is_open),
-        None => Ok(false),
-    }
-}
-
-pub async fn should_force_close_today_scrum(
-    db: &SqlitePool,
+pub fn should_force_close_scrum(
     datetime: DateTime<Local>,
-) -> Result<bool, Error> {
-    Ok(is_past_scrum_close_time(datetime) && does_open_scrum_exist(db, datetime).await?)
+    today_scrum: Option<&Scrum>,
+) -> Option<&Scrum> {
+    today_scrum.filter(|today_scrum| today_scrum.is_open && is_past_scrum_close_time(datetime))
 }
 
 pub enum ScrumStatus {

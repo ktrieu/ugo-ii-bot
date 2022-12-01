@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use dotenv::dotenv;
 use error::WithContext;
+use scrum::get_scrum_for_date;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
@@ -41,15 +42,39 @@ const BOT_CHANNEL_ID: u64 = 1044762069070774332;
 async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> {
     let now = Local::now();
 
-    let should_create_scrum = scrum::should_create_scrum(&db, now)
+    let today_scrum = get_scrum_for_date(db, now)
         .await
-        .with_context("Checking scrum creation")?;
+        .with_context("Getting today's scrum")?;
 
-    if should_create_scrum {
+    if scrum::should_create_scrum(now, today_scrum.as_ref()) {
         let channel_id = ChannelId(GENERAL_CHANNEL_ID);
         scrum::notify_scrum(db, now, &ctx, channel_id)
             .await
             .with_context("Notifying scrum")?;
+    }
+
+    if let Some(to_close) = scrum::should_force_close_scrum(now, today_scrum.as_ref()) {
+        let channel_id = ChannelId(GENERAL_CHANNEL_ID);
+
+        let message_id = to_close
+            .message_id()
+            .with_context("Parsing today's scrum message ID")?;
+
+        let message = channel_id
+            .message(&ctx.http, message_id)
+            .await
+            .with_context("Fetching message from today's scrum")?;
+
+        let reactions = scrum::parse_scrum_reactions(db, &ctx, &message)
+            .await
+            .with_context("Parsing scrum reactions")?;
+        let scrum_status = scrum::scrum_status(&reactions);
+
+        if matches!(scrum_status, scrum::ScrumStatus::Unknown) {
+            scrum::close_scrum(db, &ctx, &to_close, &reactions, channel_id, scrum_status)
+                .await
+                .with_context("Force closing scrum")?;
+        }
     }
 
     Ok(())
