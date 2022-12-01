@@ -93,12 +93,6 @@ pub async fn get_scrum_for_date(
     .await?)
 }
 
-pub async fn does_scrum_exist(db: &SqlitePool, datetime: DateTime<Local>) -> Result<bool, Error> {
-    let scrum = get_scrum_for_date(db, datetime).await?;
-
-    Ok(scrum.is_some())
-}
-
 fn is_past_scrum_notification_time(datetime: DateTime<Local>) -> bool {
     datetime.hour() >= 3
 }

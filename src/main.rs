@@ -23,7 +23,6 @@ use chrono::prelude::*;
 
 mod error;
 mod scrum;
-mod scrum_resp;
 mod user;
 
 struct Handler {
