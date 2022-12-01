@@ -10,7 +10,7 @@ use serenity::model::id::MessageId;
 
 use sqlx::SqlitePool;
 
-use crate::error::Error;
+use crate::error::{Error, InnerError};
 use crate::user;
 
 pub struct Scrum {
@@ -177,7 +177,10 @@ pub async fn parse_scrum_reactions(
     {
         let avail_user = match user::get_user(db, &avail_discord_user.id).await {
             Ok(user) => Ok(user),
-            Err(Error::UserNotFound) => continue,
+            Err(Error {
+                error: InnerError::UserNotFound,
+                ..
+            }) => continue,
             Err(other) => Err(other),
         }?;
         num_available += 1;
@@ -195,7 +198,10 @@ pub async fn parse_scrum_reactions(
     {
         let unavail_user = match user::get_user(db, &unavail_discord_user.id).await {
             Ok(user) => Ok(user),
-            Err(Error::UserNotFound) => continue,
+            Err(Error {
+                error: InnerError::UserNotFound,
+                ..
+            }) => continue,
             Err(other) => Err(other),
         }?;
         num_unavailable += 1;

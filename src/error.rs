@@ -1,34 +1,73 @@
 use std::fmt::Display;
 
 #[derive(Debug)]
-pub enum Error {
+pub enum InnerError {
     DatabaseError(sqlx::Error),
     DiscordError(serenity::Error),
     UserNotFound,
 }
 
+#[derive(Debug)]
+pub struct Error {
+    pub error: InnerError,
+    pub ctx: &'static str,
+}
+
 impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
-        Error::DatabaseError(err)
+        Self {
+            error: InnerError::DatabaseError(err),
+            ctx: "",
+        }
     }
 }
 
 impl From<serenity::Error> for Error {
     fn from(err: serenity::Error) -> Self {
-        Error::DiscordError(err)
+        Self {
+            error: InnerError::DiscordError(err),
+            ctx: "",
+        }
+    }
+}
+
+impl From<InnerError> for Error {
+    fn from(inner: InnerError) -> Self {
+        Self {
+            error: inner,
+            ctx: "",
+        }
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::DatabaseError(db_err) => f.write_fmt(format_args!("Database error: {}", db_err)),
-            Error::DiscordError(discord_err) => {
-                f.write_fmt(format_args!("Discord error: {}", discord_err))
+        let inner_error_str = match &self.error {
+            InnerError::DatabaseError(db_err) => format!("Database error: {}", db_err),
+            InnerError::DiscordError(discord_err) => {
+                format!("Discord error: {}", discord_err)
             }
-            Error::UserNotFound => f.write_str("User not found."),
-        }
+            InnerError::UserNotFound => "User not found.".to_string(),
+        };
+
+        f.write_fmt(format_args!("{} failed! ({})", self.ctx, inner_error_str))
     }
 }
 
 impl std::error::Error for Error {}
+
+pub trait WithContext<T> {
+    fn with_context(self, ctx: &'static str) -> Result<T, Error>;
+}
+
+impl<T, E> WithContext<T> for Result<T, E>
+where
+    Error: From<E>,
+{
+    fn with_context(self, ctx: &'static str) -> Result<T, Error> {
+        self.map_err(|err| Error {
+            error: Error::from(err).error,
+            ctx: ctx,
+        })
+    }
+}

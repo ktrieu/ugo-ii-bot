@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 
 use serenity::model::id::UserId;
 
-use crate::error::Error;
+use crate::error::{Error, InnerError};
 
 #[derive(Debug)]
 pub struct User {
@@ -41,7 +41,7 @@ pub async fn get_user(db: &SqlitePool, user_id: &UserId) -> Result<User, Error> 
     .await;
 
     query.map_err(|err| match err {
-        sqlx::Error::RowNotFound => Error::UserNotFound,
+        sqlx::Error::RowNotFound => InnerError::UserNotFound.into(),
         _ => err.into(),
     })
 }

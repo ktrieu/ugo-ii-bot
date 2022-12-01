@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use dotenv::dotenv;
+use error::WithContext;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
@@ -37,86 +38,100 @@ fn test_command_register(command: &mut CreateApplicationCommand) -> &mut CreateA
 const GENERAL_CHANNEL_ID: u64 = 822531930384891948;
 const BOT_CHANNEL_ID: u64 = 1044762069070774332;
 
-async fn job_poll_fn(db: &SqlitePool, ctx: Context) {
+async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> {
     let now = Local::now();
 
-    match scrum::should_create_scrum(&db, now).await {
-        Ok(true) => {
-            let channel_id = ChannelId(BOT_CHANNEL_ID);
-            if let Err(why) = scrum::notify_scrum(db, now, &ctx, channel_id).await {
-                println!("Failed to notify scrum: {:?}", why);
-            }
-        }
-        Ok(false) => (),
-        Err(err) => println!("Failed to check scrum creation: {:?}", err),
+    let should_create_scrum = scrum::should_create_scrum(&db, now)
+        .await
+        .with_context("Checking scrum creation")?;
+
+    if should_create_scrum {
+        let channel_id = ChannelId(BOT_CHANNEL_ID);
+        scrum::notify_scrum(db, now, &ctx, channel_id)
+            .await
+            .with_context("Notifying scrum")?;
+    }
+
+    Ok(())
+}
+
+// We need to separately declare these event functions so we can return a Result.
+// I'd make a function that takes a closure to clean this up, but async closures are unstable :(
+async fn interaction_create(
+    db: &SqlitePool,
+    ctx: &Context,
+    interaction: Interaction,
+) -> Result<(), error::Error> {
+    if let Interaction::ApplicationCommand(command) = interaction {
+        let discord_id = command.member.as_ref().unwrap().user.id;
+        let user = user::get_user(db, &discord_id)
+            .await
+            .with_context("Fetching command user")?;
+
+        let content: String = format!("Hello {}", user.display_name);
+
+        command
+            .create_interaction_response(&ctx.http, |response| {
+                response
+                    .kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|message| message.content(content))
+            })
+            .await
+            .with_context("Creating command response")?;
     };
+
+    Ok(())
+}
+
+async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result<(), error::Error> {
+    let scrum = match scrum::get_scrum_from_message(&db, added.message_id)
+        .await
+        .with_context("Fetching scrum from message")?
+    {
+        Some(scrum) => scrum,
+        None => return Ok(()),
+    };
+
+    // If this is a closed scrum, ignore it.
+    if !scrum.is_open {
+        return Ok(());
+    }
+
+    let discord_message = added
+        .message(&ctx.http)
+        .await
+        .with_context("Finding Discord message for react")?;
+
+    let reactions = scrum::parse_scrum_reactions(&db, &ctx, &discord_message)
+        .await
+        .with_context("Parsing scrum reactions")?;
+
+    println!("{:?}", reactions);
+
+    if scrum::scrum_possible(&reactions) {
+        scrum::alert_scrum_possible(&db, &ctx, &scrum, &reactions, ChannelId(GENERAL_CHANNEL_ID))
+            .await
+            .with_context("Alerting scrum possible")?;
+    }
+
+    Ok(())
 }
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(command) = interaction {
-            let discord_id = command.member.as_ref().unwrap().user.id;
-            let user = user::get_user(&self.db, &discord_id).await.unwrap();
+        let result = interaction_create(&self.db, &ctx, interaction).await;
 
-            let content: String = format!("Hello {}", user.display_name);
-
-            let resp_result = command
-                .create_interaction_response(ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| message.content(content))
-                })
-                .await;
-
-            if let Err(why) = resp_result {
-                println!("Could not respond to interaction! {:?}", why);
-            }
+        if let Err(why) = result {
+            println!("{}", why);
         }
     }
 
     async fn reaction_add(&self, ctx: Context, added: Reaction) {
-        let scrum = match scrum::get_scrum_from_message(&self.db, added.message_id).await {
-            Ok(Some(scrum)) => scrum,
-            Ok(None) => return,
-            Err(why) => {
-                println!("Failed to find scrum for message: {:?}", why);
-                return;
-            }
-        };
+        let result = reaction_add(&self.db, &ctx, added).await;
 
-        // If this is a closed scrum, ignore it.
-        if !scrum.is_open {
-            return;
-        }
-
-        let discord_message = match added.message(&ctx.http).await {
-            Ok(message) => message,
-            Err(why) => {
-                println!("Failed to find Discord message for react: {:?}", why);
-                return;
-            }
-        };
-
-        let reactions = match scrum::parse_scrum_reactions(&self.db, &ctx, &discord_message).await {
-            Ok(reactions) => reactions,
-            Err(why) => {
-                println!("Failed to parse scrum reacts: {:?}", why);
-                return;
-            }
-        };
-
-        println!("{:?}", reactions);
-
-        if scrum::scrum_possible(&reactions) {
-            scrum::alert_scrum_possible(
-                &self.db,
-                &ctx,
-                &scrum,
-                &reactions,
-                ChannelId(GENERAL_CHANNEL_ID),
-            )
-            .await;
+        if let Err(why) = result {
+            println!("{}", why);
         }
     }
 
@@ -141,7 +156,11 @@ impl EventHandler for Handler {
         let db = self.db.clone();
         tokio::spawn(async move {
             loop {
-                job_poll_fn(&db, ctx.clone()).await;
+                let result = job_poll_fn(&db, ctx.clone()).await;
+                if let Err(why) = result {
+                    println!("{}", why);
+                }
+
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
         });
