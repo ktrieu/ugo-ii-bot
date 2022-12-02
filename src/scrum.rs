@@ -172,27 +172,6 @@ pub async fn parse_scrum_reactions(
 
     // It's technically inefficient to refetch all the users that react, but we're going to have like four total,
     // so whatever.
-    for avail_discord_user in message
-        .reaction_users(
-            &ctx.http,
-            ReactionType::Unicode(SCRUM_ACCEPT_EMOJI.to_string()),
-            None,
-            None,
-        )
-        .await?
-    {
-        let avail_user = match user::get_user(db, &avail_discord_user.id).await {
-            Ok(user) => Ok(user),
-            Err(Error {
-                error: InnerError::UserNotFound,
-                ..
-            }) => continue,
-            Err(other) => Err(other),
-        }?;
-        num_available += 1;
-        user_availability.insert(avail_user, ScrumReact::Available);
-    }
-
     for unavail_discord_user in message
         .reaction_users(
             &ctx.http,
@@ -212,6 +191,27 @@ pub async fn parse_scrum_reactions(
         }?;
         num_unavailable += 1;
         user_availability.insert(unavail_user, ScrumReact::Unavailable);
+    }
+
+    for avail_discord_user in message
+        .reaction_users(
+            &ctx.http,
+            ReactionType::Unicode(SCRUM_ACCEPT_EMOJI.to_string()),
+            None,
+            None,
+        )
+        .await?
+    {
+        let avail_user = match user::get_user(db, &avail_discord_user.id).await {
+            Ok(user) => Ok(user),
+            Err(Error {
+                error: InnerError::UserNotFound,
+                ..
+            }) => continue,
+            Err(other) => Err(other),
+        }?;
+        num_available += 1;
+        user_availability.insert(avail_user, ScrumReact::Available);
     }
 
     Ok(ParsedScrumReacts {
