@@ -197,13 +197,13 @@ impl EventHandler for Handler {
 
         let db = self.db.clone();
         tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
+                interval.tick().await;
                 let result = job_poll_fn(&db, ctx.clone()).await;
                 if let Err(why) = result {
                     println!("{}", why);
                 }
-
-                tokio::time::sleep(Duration::from_millis(500)).await;
             }
         });
     }
