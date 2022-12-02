@@ -298,5 +298,16 @@ pub async fn close_scrum(
         .send_message(&ctx.http, |message| message.content(msg))
         .await?;
 
+    for (user, avail) in &reactions.availability {
+        match avail {
+            ScrumReact::Available | ScrumReact::Unavailable => {
+                user::increment_streak(db, user.id).await?;
+            }
+            ScrumReact::Unknown => {
+                user::clear_streak(db, user.id).await?;
+            }
+        }
+    }
+
     Ok(())
 }

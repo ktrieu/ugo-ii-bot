@@ -10,6 +10,7 @@ use crate::error::{Error, InnerError};
 pub struct User {
     pub id: i64,
     pub display_name: String,
+    pub streak: i64,
 }
 
 impl PartialEq for User {
@@ -31,8 +32,7 @@ pub async fn get_user(db: &SqlitePool, user_id: &UserId) -> Result<User, Error> 
 
     let query = sqlx::query_as!(
         User,
-        "SELECT 
-        users.id, users.display_name FROM users
+        "SELECT users.id, users.display_name, users.streak FROM users
         LEFT JOIN users_discord_ids ON users_discord_ids.user_id = users.id 
         WHERE users_discord_ids.discord_id = ?",
         user_id_str
@@ -47,9 +47,26 @@ pub async fn get_user(db: &SqlitePool, user_id: &UserId) -> Result<User, Error> 
 }
 
 pub async fn get_all_users(db: &SqlitePool) -> Result<Vec<User>, Error> {
-    Ok(
-        sqlx::query_as!(User, "SELECT users.id, users.display_name FROM users")
-            .fetch_all(db)
-            .await?,
+    Ok(sqlx::query_as!(
+        User,
+        "SELECT users.id, users.display_name, users.streak FROM users"
     )
+    .fetch_all(db)
+    .await?)
+}
+
+pub async fn increment_streak(db: &SqlitePool, id: i64) -> Result<(), Error> {
+    sqlx::query!("UPDATE users SET streak = streak + 1 WHERE id = ?", id)
+        .execute(db)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn clear_streak(db: &SqlitePool, id: i64) -> Result<(), Error> {
+    sqlx::query!("UPDATE users SET streak = 0 WHERE id = ?", id)
+        .execute(db)
+        .await?;
+
+    Ok(())
 }
