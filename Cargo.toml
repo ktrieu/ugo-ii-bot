@@ -11,3 +11,5 @@ chrono = "0.4.23"
 serenity = { version = "0.11", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
 sqlx = { version = "0.6", features = [ "sqlite", "runtime-tokio-rustls" ] }
+log = "0.4"
+simplelog = "^0.12.0"

@@ -1,12 +1,16 @@
 extern crate dotenv;
 
 use std::env;
+use std::fs::File;
 use std::str::FromStr;
 use std::time::Duration;
 
 use dotenv::dotenv;
-use error::WithContext;
-use scrum::get_scrum_for_date;
+
+use log::error;
+use log::info;
+use log::LevelFilter;
+
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::interaction::InteractionResponseType;
@@ -15,6 +19,12 @@ use serenity::model::gateway::Ready;
 use serenity::model::id::{ChannelId, GuildId};
 use serenity::{async_trait, prelude::*};
 
+use simplelog::ColorChoice;
+use simplelog::Config;
+use simplelog::TermLogger;
+use simplelog::TerminalMode;
+use simplelog::WriteLogger;
+
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
@@ -22,6 +32,7 @@ use sqlx::SqlitePool;
 use chrono::prelude::*;
 
 mod error;
+use error::WithContext;
 mod scrum;
 mod user;
 
@@ -41,11 +52,12 @@ const BOT_CHANNEL_ID: u64 = 1044762069070774332;
 async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> {
     let now = Local::now();
 
-    let today_scrum = get_scrum_for_date(db, now)
+    let today_scrum = scrum::get_scrum_for_date(db, now)
         .await
         .with_context("Getting today's scrum")?;
 
     if scrum::should_create_scrum(now, today_scrum.as_ref()) {
+        info!("Creating new scrum.");
         let channel_id = ChannelId(GENERAL_CHANNEL_ID);
         scrum::notify_scrum(db, now, &ctx, channel_id)
             .await
@@ -53,6 +65,7 @@ async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> 
     }
 
     if let Some(to_close) = scrum::should_force_close_scrum(now, today_scrum.as_ref()) {
+        info!("Force closing scrum.");
         let channel_id = ChannelId(GENERAL_CHANNEL_ID);
 
         let message_id = to_close
@@ -67,7 +80,18 @@ async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> 
         let reactions = scrum::parse_scrum_reactions(db, &ctx, &message)
             .await
             .with_context("Parsing scrum reactions")?;
+
+        info!(
+            "Reactions parsed. {} available. {} unavailable. {} unknown.",
+            reactions.num_available,
+            reactions.num_unavailable,
+            reactions.availability.len()
+                - reactions.num_available as usize
+                - reactions.num_unavailable as usize
+        );
+
         let scrum_status = scrum::scrum_status(&reactions);
+        info!("Scrum status {:?}", scrum_status);
 
         if matches!(scrum_status, scrum::ScrumStatus::Unknown) {
             scrum::close_scrum(db, &ctx, &to_close, &reactions, channel_id, scrum_status)
@@ -117,14 +141,17 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
         Some(scrum) => scrum,
         None => return Ok(()),
     };
+    info!("Reaction added to scrum for {}", scrum.scrum_date);
 
     // If this is a closed scrum, ignore it.
     if !scrum.is_open {
+        info!("Scrum closed. Ignoring.");
         return Ok(());
     }
 
     // If this isn't today's scrum, ignore it.
     if scrum.date()? != now.date_naive() {
+        info!("Scrum for previous date. Ignoring.");
         return Ok(());
     }
 
@@ -137,10 +164,22 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
         .await
         .with_context("Parsing scrum reactions")?;
 
+    info!(
+        "Reactions parsed. {} available. {} unavailable. {} unknown.",
+        reactions.num_available,
+        reactions.num_unavailable,
+        reactions.availability.len()
+            - reactions.num_available as usize
+            - reactions.num_unavailable as usize
+    );
+
     let scrum_status = scrum::scrum_status(&reactions);
+
+    info!("Scrum status: {:?}", scrum_status);
 
     match scrum_status {
         scrum::ScrumStatus::Possible | scrum::ScrumStatus::Impossible => {
+            info!("Closing scrum.");
             scrum::close_scrum(
                 db,
                 ctx,
@@ -165,7 +204,7 @@ impl EventHandler for Handler {
         let result = interaction_create(&self.db, &ctx, interaction).await;
 
         if let Err(why) = result {
-            println!("{}", why);
+            error!("{}", why);
         }
     }
 
@@ -173,7 +212,7 @@ impl EventHandler for Handler {
         let result = reaction_add(&self.db, &ctx, added).await;
 
         if let Err(why) = result {
-            println!("{}", why);
+            error!("{}", why);
         }
     }
 
@@ -192,7 +231,7 @@ impl EventHandler for Handler {
             .await;
 
         if let Err(why) = create_result {
-            println!("Failed to create commands! {:?}", why);
+            error!("Failed to create commands! {:?}", why);
         }
 
         let db = self.db.clone();
@@ -202,12 +241,14 @@ impl EventHandler for Handler {
                 interval.tick().await;
                 let result = job_poll_fn(&db, ctx.clone()).await;
                 if let Err(why) = result {
-                    println!("{}", why);
+                    error!("{}", why);
                 }
             }
         });
     }
 }
+
+const LOG_FILE_PATH: &str = "ugo-ii-bot.log";
 
 #[tokio::main]
 async fn main() {
@@ -218,6 +259,24 @@ async fn main() {
 
     let database_url =
         env::var("DATABASE_URL").expect("NO DATABASE_URL found in environment variables!");
+
+    let dev = env::var("DEV").is_ok();
+    if dev {
+        TermLogger::init(
+            LevelFilter::Info,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .expect("Failed to create terminal logger.");
+    } else {
+        WriteLogger::init(
+            LevelFilter::Info,
+            Config::default(),
+            File::create(LOG_FILE_PATH).expect("Failed to create log file."),
+        )
+        .expect("Failed to create file logger.")
+    }
 
     let connect_options = SqliteConnectOptions::from_str(&database_url)
         .expect("Failed to parse DATABASE_URL!")
@@ -239,6 +298,6 @@ async fn main() {
         .expect("Failed to create Discord client!");
 
     if let Err(why) = client.start().await {
-        panic!("Failed to start client {:?}", why);
+        error!("Failed to start client {:?}", why);
     }
 }

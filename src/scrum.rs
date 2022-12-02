@@ -232,7 +232,7 @@ pub fn should_force_close_scrum(
 ) -> Option<&Scrum> {
     today_scrum.filter(|today_scrum| today_scrum.is_open && is_past_scrum_close_time(datetime))
 }
-
+#[derive(Debug)]
 pub enum ScrumStatus {
     Possible,
     Impossible,
