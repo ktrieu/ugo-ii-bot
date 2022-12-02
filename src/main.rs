@@ -131,17 +131,17 @@ async fn interaction_create(
     Ok(())
 }
 
-async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result<(), error::Error> {
+async fn on_react(db: &SqlitePool, ctx: &Context, react: Reaction) -> Result<(), error::Error> {
     let now = Local::now();
 
-    let scrum = match scrum::get_scrum_from_message(&db, added.message_id)
+    let scrum = match scrum::get_scrum_from_message(&db, react.message_id)
         .await
         .with_context("Fetching scrum from message")?
     {
         Some(scrum) => scrum,
         None => return Ok(()),
     };
-    info!("Reaction added to scrum for {}", scrum.scrum_date);
+    info!("Reaction changed for scrum {}", scrum.scrum_date);
 
     // If this is a closed scrum, ignore it.
     if !scrum.is_open {
@@ -155,7 +155,7 @@ async fn reaction_add(db: &SqlitePool, ctx: &Context, added: Reaction) -> Result
         return Ok(());
     }
 
-    let discord_message = added
+    let discord_message = react
         .message(&ctx.http)
         .await
         .with_context("Finding Discord message for react")?;
@@ -209,7 +209,15 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_add(&self, ctx: Context, added: Reaction) {
-        let result = reaction_add(&self.db, &ctx, added).await;
+        let result = on_react(&self.db, &ctx, added).await;
+
+        if let Err(why) = result {
+            error!("{}", why);
+        }
+    }
+
+    async fn reaction_remove(&self, ctx: Context, removed: Reaction) {
+        let result = on_react(&self.db, &ctx, removed).await;
 
         if let Err(why) = result {
             error!("{}", why);
