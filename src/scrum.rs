@@ -162,8 +162,6 @@ pub async fn parse_scrum_reactions(
     message: &Message,
 ) -> Result<ParsedScrumReacts, Error> {
     let mut user_availability: HashMap<user::User, ScrumReact> = HashMap::new();
-    let mut num_available: u8 = 0;
-    let mut num_unavailable: u8 = 0;
 
     let all_users = user::get_all_users(db).await?;
     for u in all_users {
@@ -189,7 +187,6 @@ pub async fn parse_scrum_reactions(
             }) => continue,
             Err(other) => Err(other),
         }?;
-        num_unavailable += 1;
         user_availability.insert(unavail_user, ScrumReact::Unavailable);
     }
 
@@ -210,14 +207,24 @@ pub async fn parse_scrum_reactions(
             }) => continue,
             Err(other) => Err(other),
         }?;
-        num_available += 1;
         user_availability.insert(avail_user, ScrumReact::Available);
     }
 
+    let num_available = user_availability
+        .values()
+        .filter(|v| matches!(v, ScrumReact::Available))
+        .count();
+
+    let num_unavailable = user_availability
+        .values()
+        .filter(|v| matches!(v, ScrumReact::Unavailable))
+        .count();
+
+    // If we have more than 255 users in each category, I guess I'll change this.
     Ok(ParsedScrumReacts {
         availability: user_availability,
-        num_available: num_available,
-        num_unavailable: num_unavailable,
+        num_available: num_available.try_into().unwrap(),
+        num_unavailable: num_unavailable.try_into().unwrap(),
     })
 }
 
