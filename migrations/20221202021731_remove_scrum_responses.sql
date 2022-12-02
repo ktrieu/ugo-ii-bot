@@ -1,0 +1,1 @@
+DROP TABLE scrum_responses;
