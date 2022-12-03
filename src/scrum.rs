@@ -154,6 +154,7 @@ pub struct ParsedScrumReacts {
     pub availability: HashMap<user::User, ScrumReact>,
     pub num_available: u8,
     pub num_unavailable: u8,
+    pub num_unknown: u8,
 }
 
 pub async fn parse_scrum_reactions(
@@ -220,17 +221,20 @@ pub async fn parse_scrum_reactions(
         .filter(|v| matches!(v, ScrumReact::Unavailable))
         .count();
 
+    let num_unknown = user_availability.len() - num_available - num_unavailable;
+
     // If we have more than 255 users in each category, I guess I'll change this.
     Ok(ParsedScrumReacts {
         availability: user_availability,
         num_available: num_available.try_into().unwrap(),
         num_unavailable: num_unavailable.try_into().unwrap(),
+        num_unknown: num_unknown.try_into().unwrap(),
     })
 }
 
 fn is_past_scrum_close_time(datetime: DateTime<Local>) -> bool {
-    // Let's close past 10 PM
-    datetime.hour() >= 22
+    // Auto close scrums after 4 PM
+    datetime.hour() >= 12 + 4
 }
 
 pub fn should_force_close_scrum(

@@ -83,21 +83,15 @@ async fn job_poll_fn(db: &SqlitePool, ctx: Context) -> Result<(), error::Error> 
 
         info!(
             "Reactions parsed. {} available. {} unavailable. {} unknown.",
-            reactions.num_available,
-            reactions.num_unavailable,
-            reactions.availability.len()
-                - reactions.num_available as usize
-                - reactions.num_unavailable as usize
+            reactions.num_available, reactions.num_unavailable, reactions.num_unknown
         );
 
         let scrum_status = scrum::scrum_status(&reactions);
         info!("Scrum status {:?}", scrum_status);
 
-        if matches!(scrum_status, scrum::ScrumStatus::Unknown) {
-            scrum::close_scrum(db, &ctx, &to_close, &reactions, channel_id, scrum_status)
-                .await
-                .with_context("Force closing scrum")?;
-        }
+        scrum::close_scrum(db, &ctx, &to_close, &reactions, channel_id, scrum_status)
+            .await
+            .with_context("Force closing scrum")?;
     }
 
     Ok(())
@@ -166,33 +160,24 @@ async fn on_react(db: &SqlitePool, ctx: &Context, react: Reaction) -> Result<(),
 
     info!(
         "Reactions parsed. {} available. {} unavailable. {} unknown.",
-        reactions.num_available,
-        reactions.num_unavailable,
-        reactions.availability.len()
-            - reactions.num_available as usize
-            - reactions.num_unavailable as usize
+        reactions.num_available, reactions.num_unavailable, reactions.num_unknown
     );
 
-    let scrum_status = scrum::scrum_status(&reactions);
-
-    info!("Scrum status: {:?}", scrum_status);
-
-    match scrum_status {
-        scrum::ScrumStatus::Possible | scrum::ScrumStatus::Impossible => {
-            info!("Closing scrum.");
-            scrum::close_scrum(
-                db,
-                ctx,
-                &scrum,
-                &reactions,
-                ChannelId(GENERAL_CHANNEL_ID),
-                scrum_status,
-            )
-            .await
-            .with_context("Closing scrum")?;
-        }
-        // There's still time, do nothing
-        scrum::ScrumStatus::Unknown => {}
+    // Only close on react if all the votes are in
+    if reactions.num_unknown == 0 {
+        info!("Closing scrum.");
+        let scrum_status = scrum::scrum_status(&reactions);
+        info!("Scrum status: {:?}", scrum_status);
+        scrum::close_scrum(
+            db,
+            ctx,
+            &scrum,
+            &reactions,
+            ChannelId(GENERAL_CHANNEL_ID),
+            scrum_status,
+        )
+        .await
+        .with_context("Closing scrum")?;
     }
 
     Ok(())
