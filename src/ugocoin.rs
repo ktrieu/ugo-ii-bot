@@ -1,6 +1,8 @@
+use std::fmt::Display;
+
 use crate::{error::Error, user::User};
 
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::SqlitePool;
 
 // Ugocoins are represented as a fixed-point number of ugocents.
 pub struct Ugocoin(i64);
@@ -12,6 +14,19 @@ impl Ugocoin {
 
     pub fn from_ugocoin(coins: i64) -> Ugocoin {
         Ugocoin(coins * 100)
+    }
+}
+
+impl Display for Ugocoin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let cents = self.0 % 100;
+        let coins = self.0 / 100;
+
+        if coins > 0 {
+            f.write_fmt(format_args!("U${}.{}", coins, cents))
+        } else {
+            f.write_fmt(format_args!("U¢{}", cents))
+        }
     }
 }
 
@@ -36,7 +51,7 @@ async fn get_account_by_id(db: &SqlitePool, id: Option<i64>) -> Result<UgocoinAc
     })
 }
 
-pub async fn get_account(db: &SqlitePool, user: &User) -> Result<UgocoinAccount, Error> {
+pub async fn get_user_account(db: &SqlitePool, user: &User) -> Result<UgocoinAccount, Error> {
     get_account_by_id(db, Some(user.id)).await
 }
 
