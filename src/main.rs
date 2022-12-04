@@ -33,7 +33,9 @@ use chrono::prelude::*;
 
 mod error;
 use error::WithContext;
+
 mod scrum;
+mod ugocoin;
 mod user;
 
 struct Handler {
