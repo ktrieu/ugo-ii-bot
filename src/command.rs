@@ -89,10 +89,17 @@ async fn balances_command_run(
 
     let mut balance_string: String = String::new();
 
+    let max_name_width = balance_infos.iter().map(|i| i.name.len()).max().unwrap();
+    let max_coin_width = balance_infos
+        .iter()
+        .map(|i| format!("{}", i.balance).len())
+        .max()
+        .unwrap();
+
     for info in balance_infos {
         balance_string += &format!(
-            "{:<16} | {:<16} | (scrum streak {})\n",
-            info.name, info.balance, info.streak
+            "{:<max_name_width$} | {:<max_coin_width$} | (scrum streak {})\n",
+            info.name, info.balance, info.streak,
         );
     }
 
