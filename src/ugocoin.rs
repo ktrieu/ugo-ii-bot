@@ -23,10 +23,12 @@ impl Display for Ugocoin {
         let cents = self.0 % 100;
         let coins = self.0 / 100;
 
-        if coins > 0 {
-            f.write_fmt(format_args!("U${}.{}", coins, cents))
+        if coins == 0 && cents == 0 {
+            f.write_str("U$0.00")
+        } else if coins > 0 {
+            f.write_fmt(format_args!("U${}.{:02}", coins, cents))
         } else {
-            f.write_fmt(format_args!("U¢{}", cents))
+            f.write_fmt(format_args!("{} U¢", cents))
         }
     }
 }
