@@ -87,11 +87,11 @@ async fn balances_command_run(
     balance_infos.sort_by_cached_key(|info| info.balance);
     balance_infos.reverse();
 
-    let mut content: String = String::from("Current UGOcoin balances:\n\n");
+    let mut balance_string: String = String::new();
 
     for info in balance_infos {
-        content += &format!(
-            "{}: {} (scrum streak {})\n",
+        balance_string += &format!(
+            "{:<16} | {:<16} | (scrum streak {})\n",
             info.name, info.balance, info.streak
         );
     }
@@ -99,7 +99,12 @@ async fn balances_command_run(
     command
         .create_interaction_response(&context.http, |resp| {
             resp.kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|data| data.content(content))
+                .interaction_response_data(|data| {
+                    data.content(format!(
+                        "Current UGOcoin balances:\n\n```{}```",
+                        balance_string
+                    ))
+                })
         })
         .await?;
 

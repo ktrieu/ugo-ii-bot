@@ -4,6 +4,8 @@ use crate::{error::Error, user::User};
 
 use sqlx::SqlitePool;
 
+use thousands::Separable;
+
 // Ugocoins are represented as a fixed-point number of ugocents.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Ugocoin(i64);
@@ -26,7 +28,11 @@ impl Display for Ugocoin {
         if coins == 0 && cents == 0 {
             f.write_str("U$0.00")
         } else if coins > 0 {
-            f.write_fmt(format_args!("U${}.{:02}", coins, cents))
+            f.write_fmt(format_args!(
+                "U${}.{:02}",
+                coins.separate_with_commas(),
+                cents
+            ))
         } else {
             f.write_fmt(format_args!("{} U¢", cents))
         }
