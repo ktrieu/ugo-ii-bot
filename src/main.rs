@@ -11,9 +11,7 @@ use log::error;
 use log::info;
 use log::LevelFilter;
 
-use serenity::builder::CreateApplicationCommand;
 use serenity::model::application::interaction::Interaction;
-use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::channel::Reaction;
 use serenity::model::gateway::Ready;
 use serenity::model::id::{ChannelId, GuildId};

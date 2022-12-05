@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serenity::builder::{CreateApplicationCommand, CreateApplicationCommands};
 use serenity::client::Context;
 use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
@@ -8,7 +6,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{Error, InnerError, WithContext};
 use crate::ugocoin::{self, Ugocoin};
-use crate::user::{self, User};
+use crate::user;
 
 // This is kinda trash, but async function pointers are actually quite difficult to do.
 // Instead, enjoy a bunch of string constants and a giant match table.
