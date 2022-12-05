@@ -6,6 +6,7 @@ pub enum InnerError {
     DiscordError(serenity::Error),
     DateTimeParseError(chrono::ParseError),
     IdParseError(std::num::ParseIntError),
+    CommandNotFound(String),
     UserNotFound,
 }
 
@@ -65,6 +66,7 @@ impl Display for Error {
                 format!("Error parsing ID from string: {}", int_parse_err)
             }
             InnerError::UserNotFound => "User not found.".to_string(),
+            InnerError::CommandNotFound(command) => format!("Command {} not found.", command),
         };
 
         f.write_fmt(format_args!("{} failed! ({})", self.ctx, inner_error_str))

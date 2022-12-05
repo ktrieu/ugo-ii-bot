@@ -34,18 +34,13 @@ use chrono::prelude::*;
 mod error;
 use error::WithContext;
 
+mod command;
 mod scrum;
 mod ugocoin;
 mod user;
 
 struct Handler {
     db: SqlitePool,
-}
-
-fn test_command_register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command
-        .name("test")
-        .description("A test command for the UGO bot")
 }
 
 const GENERAL_CHANNEL_ID: u64 = 822531930384891948;
@@ -107,21 +102,10 @@ async fn interaction_create(
     interaction: Interaction,
 ) -> Result<(), error::Error> {
     if let Interaction::ApplicationCommand(command) = interaction {
-        let discord_id = command.member.as_ref().unwrap().user.id;
-        let user = user::get_user(db, &discord_id)
+        info!("Executing command {}.", command.data.name);
+        command::run_command(&command.data.name, db, ctx, &command)
             .await
-            .with_context("Fetching command user")?;
-
-        let content: String = format!("Hello {}", user.display_name);
-
-        command
-            .create_interaction_response(&ctx.http, |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|message| message.content(content))
-            })
-            .await
-            .with_context("Creating command response")?;
+            .with_context("executing command.")?;
     };
 
     Ok(())
@@ -220,11 +204,8 @@ impl EventHandler for Handler {
         );
 
         let create_result = guild_id
-            .set_application_commands(&ctx.http, |commands| {
-                commands.create_application_command(|command| test_command_register(command))
-            })
+            .set_application_commands(&ctx.http, |commands| command::register_commands(commands))
             .await;
-
         if let Err(why) = create_result {
             error!("Failed to create commands! {:?}", why);
         }
