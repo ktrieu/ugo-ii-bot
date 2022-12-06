@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::NaiveDate;
 use chrono::{DateTime, Local, Timelike};
 
+use log::info;
 use serenity::client::Context;
 use serenity::model::channel::Message;
 use serenity::model::channel::ReactionType;
@@ -318,9 +319,15 @@ pub async fn close_scrum(
         match avail {
             ScrumReact::Available | ScrumReact::Unavailable => {
                 user::increment_streak(db, user.id).await?;
-
+                info!(
+                    "New streak for {} is {}",
+                    user.display_name,
+                    user.streak + 1
+                );
                 // Account for the updated streak when calculating the reward
                 let reward = calculate_scrum_reward(user.streak + 1);
+                info!("Crediting scrum reward of {}", reward);
+
                 let user_account = get_user_account(db, user).await?;
                 let memo = format!("Scrum reward for {}", scrum.date()?.format("%Y-%m-%d"));
 
