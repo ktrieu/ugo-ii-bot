@@ -10,7 +10,8 @@ use serenity::model::id::GuildId;
 use sqlx::SqlitePool;
 
 use crate::error::{Error, InnerError, WithContext};
-use crate::ugocoin::{self, Ugocoin};
+use crate::ugocoin;
+use crate::ugocoin::account::Ugocoin;
 use crate::user;
 
 #[async_trait]
@@ -104,7 +105,7 @@ impl Command for BalanceCommand {
         let mut balance_infos: Vec<BalanceInfo> = Vec::new();
 
         for u in users {
-            let account = ugocoin::get_user_account(db, &u).await?;
+            let account = ugocoin::account::get_user_account(db, &u).await?;
             balance_infos.push(BalanceInfo {
                 name: u.display_name,
                 balance: account.balance,
@@ -112,7 +113,7 @@ impl Command for BalanceCommand {
             });
         }
 
-        let central_account = ugocoin::get_central_bank_account(db).await?;
+        let central_account = ugocoin::account::get_central_bank_account(db).await?;
         balance_infos.push(BalanceInfo {
             name: String::from("UGOcoin Central Bank"),
             balance: central_account.balance,

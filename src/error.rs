@@ -7,6 +7,8 @@ pub enum InnerError {
     DateTimeParseError(chrono::ParseError),
     IdParseError(std::num::ParseIntError),
     CommandNotFound(String),
+    InsufficientFunds,
+    NegativeTransfer,
     UserNotFound,
 }
 
@@ -67,6 +69,8 @@ impl Display for Error {
             }
             InnerError::UserNotFound => "User not found.".to_string(),
             InnerError::CommandNotFound(command) => format!("Command {} not found.", command),
+            InnerError::InsufficientFunds => "Insufficent funds for transfer!".to_string(),
+            InnerError::NegativeTransfer => "Attempted to transfer a negative amount!".to_string(),
         };
 
         f.write_fmt(format_args!("{} failed! ({})", self.ctx, inner_error_str))
