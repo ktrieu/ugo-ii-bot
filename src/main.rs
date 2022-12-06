@@ -11,6 +11,9 @@ use log::error;
 use log::info;
 use log::LevelFilter;
 
+#[macro_use]
+extern crate lazy_static;
+
 use serenity::model::application::interaction::Interaction;
 use serenity::model::channel::Reaction;
 use serenity::model::gateway::Ready;
@@ -101,7 +104,7 @@ async fn interaction_create(
 ) -> Result<(), error::Error> {
     if let Interaction::ApplicationCommand(command) = interaction {
         info!("Executing command {}.", command.data.name);
-        command::run_command(&command.data.name, db, ctx, &command)
+        command::run_command(db, ctx, &command)
             .await
             .with_context("executing command.")?;
     };
@@ -201,12 +204,9 @@ impl EventHandler for Handler {
                 .expect("GUILD_ID is not an integer!"),
         );
 
-        let create_result = guild_id
-            .set_application_commands(&ctx.http, |commands| command::register_commands(commands))
-            .await;
-        if let Err(why) = create_result {
-            error!("Failed to create commands! {:?}", why);
-        }
+        command::register_commands(&ctx, guild_id)
+            .await
+            .expect("Failed to create commands!");
 
         let db = self.db.clone();
         tokio::spawn(async move {

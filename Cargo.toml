@@ -14,3 +14,4 @@ sqlx = { version = "0.6", features = [ "sqlite", "runtime-tokio-rustls" ] }
 log = "0.4"
 simplelog = "^0.12.0"
 thousands = "0.2.0"
+lazy_static = "1.4.0"
