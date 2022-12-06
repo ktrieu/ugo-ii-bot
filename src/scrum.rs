@@ -12,6 +12,7 @@ use serenity::model::id::MessageId;
 use sqlx::SqlitePool;
 
 use crate::error::{Error, InnerError};
+use crate::ugocoin::account::{credit_account, get_user_account, Ugocoin};
 use crate::user;
 
 pub struct Scrum {
@@ -283,6 +284,10 @@ pub fn scrum_status(reactions: &ParsedScrumReacts) -> ScrumStatus {
     }
 }
 
+fn calculate_scrum_reward(streak: i64) -> Ugocoin {
+    Ugocoin::from_ugocoin(1 + streak / 7)
+}
+
 const SCRUM_CLOSED_MESSAGE: &str = "Voting is closed for this scrum.";
 
 pub async fn close_scrum(
@@ -313,6 +318,13 @@ pub async fn close_scrum(
         match avail {
             ScrumReact::Available | ScrumReact::Unavailable => {
                 user::increment_streak(db, user.id).await?;
+
+                // Account for the updated streak when calculating the reward
+                let reward = calculate_scrum_reward(user.streak + 1);
+                let user_account = get_user_account(db, user).await?;
+                let memo = format!("Scrum reward for {}", scrum.date()?.format("%Y-%m-%d"));
+
+                credit_account(db, &user_account, reward, &memo).await?;
             }
             ScrumReact::Unknown => {
                 user::clear_streak(db, user.id).await?;
